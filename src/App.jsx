@@ -160,15 +160,30 @@ const App = () => {
     const uwl = mean + 2 * stdDev;
     const lwl = mean - 2 * stdDev;
 
-    const allValuesOnChart = [...values, ucl, lcl];
+    // --- Y-Axis Domain Calculation with Improved Padding ---
+    const displayStats = currentChart.inheritedStats || { ucl, lcl, mean };
+    const allValuesOnChart = [...values, displayStats.ucl, displayStats.lcl];
     if (currentChart.materialInfo.certifiedValue && !isNaN(parseFloat(currentChart.materialInfo.certifiedValue))) {
         allValuesOnChart.push(parseFloat(currentChart.materialInfo.certifiedValue));
     }
-    const chartMin = Math.min(...allValuesOnChart);
-    const chartMax = Math.max(...allValuesOnChart);
-    const range = chartMax - chartMin;
-    const padding = range > 0 ? range * 0.15 : 1;
-    const domain = [chartMin - padding, chartMax + padding];
+    
+    let chartMin = Math.min(...allValuesOnChart);
+    let chartMax = Math.max(...allValuesOnChart);
+    
+    if (chartMin === chartMax) {
+        const centerValue = chartMin;
+        const padding = Math.abs(centerValue * 0.001) || 0.5; 
+        chartMin -= padding;
+        chartMax += padding;
+    } else {
+        const range = chartMax - chartMin;
+        const padding = range * 0.15;
+        chartMin -= padding;
+        chartMax += padding;
+    }
+
+    const domain = [chartMin, chartMax];
+    // --- End of Y-Axis Calculation ---
 
     const newStats = { mean, stdDev, ucl, lcl, uwl, lwl, count: values.length, domain };
     
@@ -378,6 +393,33 @@ const App = () => {
   const displayStats = currentChart?.inheritedStats || currentChart?.stats;
   const isDataEntryDisabled = currentChart?.data.length >= 30;
 
+  // Prepare data for the chart, including control limit values for each point
+  const chartData = currentChart?.data.map(d => ({
+    ...d,
+    mean: displayStats.mean,
+    ucl: displayStats.ucl,
+    lcl: displayStats.lcl,
+    uwl: displayStats.uwl,
+    lwl: displayStats.lwl,
+  })) || [];
+
+  // Custom Tooltip for the chart to show more details
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+          <div className="bg-white p-3 border border-gray-300 rounded shadow-lg text-sm">
+              <p className="font-bold">{`Punto: ${label}`}</p>
+              <p style={{ color: payload[0].color }}>{`Valor: ${data.value.toFixed(5)} ${currentChart.materialInfo.unit || ''}`}</p>
+              <p className="text-gray-600">{`Analista: ${data.analyst}`}</p>
+              <p className="text-gray-600">{`Lote: ${data.lote || 'N/A'}`}</p>
+              <p className="text-gray-600">{`Fecha: ${data.date} - ${data.time}`}</p>
+          </div>
+      );
+    }
+    return null;
+  };
+
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 text-center p-4">
@@ -462,12 +504,12 @@ const App = () => {
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Analista</label><input type="text" value={currentAnalyst} onChange={(e) => setCurrentAnalyst(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" list="analysts-list"/><datalist id="analysts-list">{currentChart.analystsList.map((a, i) => <option key={i} value={a} />)}</datalist></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Nuevo Valor</label><div className="flex gap-2"><input type="number" step="any" value={newValue} onChange={(e) => setNewValue(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && addDataPoint()} className="flex-1 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" disabled={isDataEntryDisabled} /><button onClick={addDataPoint} disabled={!newValue || !currentAnalyst.trim() || isDataEntryDisabled} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 disabled:bg-gray-400"><Plus className="w-4 h-4" /> Agregar</button></div></div>
                 {isDataEntryDisabled && <p className="text-sm text-center text-blue-600 font-semibold p-2 bg-blue-50 rounded-md">Límite de 30 datos alcanzado para esta carta.</p>}
-                <div className="max-h-60 overflow-y-auto border-t pt-4"><h3 className="font-medium text-gray-700 mb-2">Datos Ingresados ({currentChart.data.length})</h3>{currentChart.data.length === 0 ? <p className="text-gray-500 text-sm">No hay datos.</p> : <div className="space-y-2">{currentChart.data.slice().reverse().map((item) => (<div key={item.id} className="flex items-center justify-between bg-gray-50 p-2 rounded-md"><div className="flex-1 text-sm"><span className="font-bold text-gray-800">#{item.point}:</span> {item.value} {currentChart.materialInfo.unit}<div className="text-xs text-gray-500 mt-1">{item.analyst} • {item.date} {item.time} • Lote: {item.lote || 'N/A'}</div></div><button onClick={() => startRemoveDataPoint(item.id)} className="text-red-500 hover:text-red-700 p-1 rounded-full"><Trash2 className="w-4 h-4" /></button></div>))}</div>}</div>
+                <div className="max-h-60 overflow-y-auto border-t pt-4"><h3 className="font-medium text-gray-700 mb-2">Datos Ingresados ({currentChart.data.length})</h3>{currentChart.data.length === 0 ? <p className="text-gray-500 text-sm">No hay datos.</p> : <div className="space-y-2">{currentChart.data.slice().reverse().map((item) => (<div key={item.id} className="flex items-center justify-between bg-gray-50 p-2 rounded-md"><div className="flex-1 text-sm"><span className="font-bold text-gray-800">#{item.point}:</span> {item.value} {currentChart.materialInfo.unit || ''}<div className="text-xs text-gray-500 mt-1">{item.analyst} • {item.date} {item.time} • Lote: {item.lote || 'N/A'}</div></div><button onClick={() => startRemoveDataPoint(item.id)} className="text-red-500 hover:text-red-700 p-1 rounded-full"><Trash2 className="w-4 h-4" /></button></div>))}</div>}</div>
               </div>
             </div>
             <div className="bg-white rounded-xl shadow-lg p-6">
               <h2 className="text-xl font-semibold text-gray-800 mb-4">3. Estadísticas {currentChart.inheritedStats ? "(Límites Fijos)" : "(Límites Móviles)"}</h2>
-              {currentChart.data.length > 1 ? (<div className="space-y-3"><div className="grid grid-cols-2 gap-4 text-center"><div className="bg-blue-50 p-3 rounded-lg"><div className="text-sm text-blue-600">Media (X̄)</div><div className="text-lg font-semibold">{displayStats.mean.toFixed(4)}</div></div><div className="bg-green-50 p-3 rounded-lg"><div className="text-sm text-green-600">Desv. Est. (s)</div><div className="text-lg font-semibold">{displayStats.stdDev.toFixed(4)}</div></div><div className="bg-red-50 p-3 rounded-lg"><div className="text-sm text-red-600">LSC (+3σ)</div><div className="text-lg font-semibold">{displayStats.ucl.toFixed(4)}</div></div><div className="bg-red-50 p-3 rounded-lg"><div className="text-sm text-red-600">LIC (-3σ)</div><div className="text-lg font-semibold">{displayStats.lcl.toFixed(4)}</div></div><div className="bg-yellow-50 p-3 rounded-lg"><div className="text-sm text-yellow-600">LSA (+2σ)</div><div className="text-lg font-semibold">{displayStats.uwl.toFixed(4)}</div></div><div className="bg-yellow-50 p-3 rounded-lg"><div className="text-sm text-yellow-600">LIA (-2σ)</div><div className="text-lg font-semibold">{displayStats.lwl.toFixed(4)}</div></div></div></div>) : <p className="text-gray-500 text-sm h-full flex items-center justify-center">Se necesitan al menos 2 puntos.</p>}
+              {currentChart.data.length > 1 ? (<div className="space-y-3"><div className="grid grid-cols-2 gap-4 text-center"><div className="bg-blue-50 p-3 rounded-lg"><div className="text-sm text-blue-600">Media (X̄)</div><div className="text-lg font-semibold">{displayStats.mean.toFixed(5)}</div></div><div className="bg-green-50 p-3 rounded-lg"><div className="text-sm text-green-600">Desv. Est. (s)</div><div className="text-lg font-semibold">{displayStats.stdDev.toFixed(5)}</div></div><div className="bg-red-50 p-3 rounded-lg"><div className="text-sm text-red-600">LSC (+3σ)</div><div className="text-lg font-semibold">{displayStats.ucl.toFixed(5)}</div></div><div className="bg-red-50 p-3 rounded-lg"><div className="text-sm text-red-600">LIC (-3σ)</div><div className="text-lg font-semibold">{displayStats.lcl.toFixed(5)}</div></div><div className="bg-yellow-50 p-3 rounded-lg"><div className="text-sm text-yellow-600">LSA (+2σ)</div><div className="text-lg font-semibold">{displayStats.uwl.toFixed(5)}</div></div><div className="bg-yellow-50 p-3 rounded-lg"><div className="text-sm text-yellow-600">LIA (-2σ)</div><div className="text-lg font-semibold">{displayStats.lwl.toFixed(5)}</div></div></div></div>) : <p className="text-gray-500 text-sm h-full flex items-center justify-center">Se necesitan al menos 2 puntos.</p>}
             </div>
           </div>
 
@@ -476,19 +518,30 @@ const App = () => {
               <h2 className="text-xl font-semibold text-gray-800 mb-4">Estadísticas Móviles (Carta Actual)</h2>
               <p className="text-sm text-gray-500 mb-4">Estos son los límites que se calcularían solo con los datos de esta carta. Sirven para comparar la variabilidad actual con los límites fijos establecidos.</p>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 text-center">
-                <div className="bg-blue-50 p-3 rounded-lg"><div className="text-sm text-blue-600">Media (X̄)</div><div className="text-lg font-semibold">{currentChart.stats.mean.toFixed(4)}</div></div>
-                <div className="bg-green-50 p-3 rounded-lg"><div className="text-sm text-green-600">Desv. Est. (s)</div><div className="text-lg font-semibold">{currentChart.stats.stdDev.toFixed(4)}</div></div>
-                <div className="bg-red-50 p-3 rounded-lg"><div className="text-sm text-red-600">LSC</div><div className="text-lg font-semibold">{currentChart.stats.ucl.toFixed(4)}</div></div>
-                <div className="bg-red-50 p-3 rounded-lg"><div className="text-sm text-red-600">LIC</div><div className="text-lg font-semibold">{currentChart.stats.lcl.toFixed(4)}</div></div>
-                <div className="bg-yellow-50 p-3 rounded-lg"><div className="text-sm text-yellow-600">LSA</div><div className="text-lg font-semibold">{currentChart.stats.uwl.toFixed(4)}</div></div>
-                <div className="bg-yellow-50 p-3 rounded-lg"><div className="text-sm text-yellow-600">LIA</div><div className="text-lg font-semibold">{currentChart.stats.lwl.toFixed(4)}</div></div>
+                <div className="bg-blue-50 p-3 rounded-lg"><div className="text-sm text-blue-600">Media (X̄)</div><div className="text-lg font-semibold">{currentChart.stats.mean.toFixed(5)}</div></div>
+                <div className="bg-green-50 p-3 rounded-lg"><div className="text-sm text-green-600">Desv. Est. (s)</div><div className="text-lg font-semibold">{currentChart.stats.stdDev.toFixed(5)}</div></div>
+                <div className="bg-red-50 p-3 rounded-lg"><div className="text-sm text-red-600">LSC</div><div className="text-lg font-semibold">{currentChart.stats.ucl.toFixed(5)}</div></div>
+                <div className="bg-red-50 p-3 rounded-lg"><div className="text-sm text-red-600">LIC</div><div className="text-lg font-semibold">{currentChart.stats.lcl.toFixed(5)}</div></div>
+                <div className="bg-yellow-50 p-3 rounded-lg"><div className="text-sm text-yellow-600">LSA</div><div className="text-lg font-semibold">{currentChart.stats.uwl.toFixed(5)}</div></div>
+                <div className="bg-yellow-50 p-3 rounded-lg"><div className="text-sm text-yellow-600">LIA</div><div className="text-lg font-semibold">{currentChart.stats.lwl.toFixed(5)}</div></div>
               </div>
             </div>
           )}
 
           {currentChart.alerts.length > 0 && <div className="bg-white rounded-xl shadow-lg p-6"><h2 className="text-xl font-semibold text-gray-800 mb-4">Alertas y Observaciones</h2><div className="space-y-2">{currentChart.alerts.map((alert, index) => (<div key={index} className={`p-3 rounded-lg flex items-start gap-3 ${alert.type === 'critical' ? 'bg-red-100 text-red-800' : alert.type === 'warning' ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}><span className="font-bold text-lg mt-0.5">{alert.type === 'critical' ? '🚨' : alert.type === 'warning' ? '⚠️' : '📈'}</span><div><span className="font-semibold">{alert.type === 'critical' ? 'Crítico' : alert.type === 'warning' ? 'Advertencia' : 'Tendencia'}</span>: {alert.message}</div></div>))}</div></div>}
           {currentChart.data.length >= 3 && <div className="bg-white rounded-xl shadow-lg p-6"><div className="flex flex-wrap items-center justify-between mb-4 gap-2"><h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2"><TrendingUp className="w-5 h-5 text-green-600" />Análisis de Normalidad</h2><div className={`px-3 py-1 rounded-full text-sm font-medium ${currentChart.normalityTests.isNormal ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{currentChart.normalityTests.isNormal ? '✓ Aparentemente Normal' : '⚠️ Revisar Normalidad'}</div></div><div className="grid grid-cols-1 lg:grid-cols-2 gap-6"><div><h3 className="font-medium text-gray-700 mb-3 text-center">Histograma</h3><div className="h-64"><ResponsiveContainer width="100%" height="100%"><BarChart data={currentChart.histogramData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="bin" /><YAxis allowDecimals={false} /><Tooltip formatter={(v) => [v, 'Frecuencia']} /><Bar dataKey="count" name="Frecuencia" fill="#3b82f6" /></BarChart></ResponsiveContainer></div></div><div><h3 className="font-medium text-gray-700 mb-3 text-center">Indicadores</h3><div className="space-y-4"><div className="bg-gray-50 p-4 rounded-lg grid grid-cols-2 gap-4 text-center"><div><div className="text-sm text-gray-600">Asimetría</div><div className={`text-lg font-semibold ${currentChart.normalityTests.isSkewnessNormal ? 'text-green-600' : 'text-red-600'}`}>{currentChart.normalityTests.skewness.toFixed(3)}</div></div><div><div className="text-sm text-gray-600">Curtosis (Exceso)</div><div className={`text-lg font-semibold ${currentChart.normalityTests.isKurtosisNormal ? 'text-green-600' : 'text-red-600'}`}>{currentChart.normalityTests.kurtosis.toFixed(3)}</div></div></div><div className="text-xs text-gray-600 bg-blue-50 p-3 rounded-lg"><p>• <strong>Asimetría:</strong> Ideal entre -2 y 2.</p><p>• <strong>Curtosis:</strong> Ideal entre -2 y 2.</p></div></div></div></div></div>}
-          {currentChart.data.length > 0 && <div className="bg-white rounded-xl shadow-lg p-6"><div className="flex flex-wrap items-center justify-between mb-4 gap-3"><h2 className="text-xl font-semibold text-gray-800">Carta de Control (Gráfico I)</h2><button onClick={exportData} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2 text-sm"><Download className="w-4 h-4" />Exportar Datos</button></div><div className="h-96 w-full"><ResponsiveContainer><LineChart data={currentChart.data} margin={{ top: 5, right: 30, left: 0, bottom: 20 }}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="point" label={{ value: 'Número de Punto', position: 'insideBottom', offset: -10 }} /><YAxis type="number" domain={displayStats.domain} allowDataOverflow={true} label={{ value: currentChart.materialInfo.unit || 'Valor', angle: -90, position: 'insideLeft' }} /><Tooltip content={CustomTooltip} /><Legend verticalAlign="top" wrapperStyle={{ paddingBottom: '20px' }}/><ReferenceLine y={displayStats.mean} label={{ value: 'Media', position: 'right', fill: '#2563eb' }} stroke="#2563eb" strokeWidth={2} strokeDasharray="5 5" /><ReferenceLine y={displayStats.ucl} label={{ value: 'LSC', position: 'right', fill: '#dc2626' }} stroke="#dc2626" strokeDasharray="3 3" /><ReferenceLine y={displayStats.lcl} label={{ value: 'LIC', position: 'right', fill: '#dc2626' }} stroke="#dc2626" strokeDasharray="3 3" /><ReferenceLine y={displayStats.uwl} stroke="#f59e0b" strokeDasharray="2 2" /><ReferenceLine y={displayStats.lwl} stroke="#f59e0a" strokeDasharray="2 2" />{currentChart.materialInfo.certifiedValue && !isNaN(parseFloat(currentChart.materialInfo.certifiedValue)) && (<ReferenceLine y={parseFloat(currentChart.materialInfo.certifiedValue)} label={{ value: 'Valor Cert.', position: 'right', fill: '#7c3aed' }} stroke="#7c3aed" strokeWidth={2} strokeDasharray="10 5" />)}<Line type="monotone" dataKey="value" name="Valor Medido" stroke="#1e40af" strokeWidth={2} activeDot={{ r: 8 }} /></LineChart></ResponsiveContainer></div></div>}
+          {currentChart.data.length > 0 && <div className="bg-white rounded-xl shadow-lg p-6"><div className="flex flex-wrap items-center justify-between mb-4 gap-3"><h2 className="text-xl font-semibold text-gray-800">Carta de Control (Gráfico I)</h2><button onClick={exportData} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2 text-sm"><Download className="w-4 h-4" />Exportar Datos</button></div><div className="h-96 w-full"><ResponsiveContainer><LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 20 }}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="point" label={{ value: 'Número de Punto', position: 'insideBottom', offset: -10 }} /><YAxis type="number" domain={displayStats.domain} allowDataOverflow={true} tick={false} label={{ value: currentChart.materialInfo.unit || 'Valor', angle: -90, position: 'insideLeft' }} /><Tooltip content={<CustomTooltip />} /><Legend verticalAlign="top" wrapperStyle={{ paddingBottom: '20px' }}/>
+            <Line type="monotone" dataKey="value" name="Valor Medido" stroke="#1e40af" strokeWidth={2} activeDot={{ r: 8 }} />
+            <Line type="monotone" dataKey="mean" name="Media" stroke="#2563eb" strokeWidth={2} strokeDasharray="5 5" dot={false} activeDot={false} />
+            <Line type="monotone" dataKey="ucl" name="LSC" stroke="#dc2626" strokeDasharray="3 3" dot={false} activeDot={false} />
+            <Line type="monotone" dataKey="lcl" name="LIC" stroke="#dc2626" strokeDasharray="3 3" dot={false} activeDot={false} />
+            <Line type="monotone" dataKey="uwl" name="LSA" stroke="#f59e0b" strokeDasharray="2 2" dot={false} activeDot={false} />
+            <Line type="monotone" dataKey="lwl" name="LIA" stroke="#f59e0b" strokeDasharray="2 2" dot={false} activeDot={false} />
+            {currentChart.materialInfo.certifiedValue && !isNaN(parseFloat(currentChart.materialInfo.certifiedValue)) && (
+                <Line name="Valor Certificado" stroke="#7c3aed" strokeWidth={2} strokeDasharray="10 5" dot={false} activeDot={false} />
+            )}
+            {currentChart.materialInfo.certifiedValue && !isNaN(parseFloat(currentChart.materialInfo.certifiedValue)) && (<ReferenceLine y={parseFloat(currentChart.materialInfo.certifiedValue)} stroke="#7c3aed" strokeWidth={2} strokeDasharray="10 5" />)}
+          </LineChart></ResponsiveContainer></div></div>}
         </main>
       </div>
     </>
@@ -583,7 +636,7 @@ const CustomTooltip = ({ active, payload, label }) => {
     return (
         <div className="bg-white p-3 border border-gray-300 rounded shadow-lg text-sm">
             <p className="font-bold">{`Punto: ${label}`}</p>
-            <p style={{ color: payload[0].color }}>{`Valor: ${data.value.toFixed(4)}`}</p>
+            <p style={{ color: payload[0].color }}>{`Valor: ${data.value.toFixed(5)}`}</p>
             <p className="text-gray-600">{`Analista: ${data.analyst}`}</p>
             <p className="text-gray-600">{`Lote: ${data.lote || 'N/A'}`}</p>
             <p className="text-gray-600">{`Fecha: ${data.date} - ${data.time}`}</p>
