@@ -96,6 +96,10 @@ const App = () => {
                             const loadedData = docSnap.data();
                             setProcessGroups(loadedData.processGroups || []);
                             setAuditLog(loadedData.auditLog || []);
+                            // FIX: Load the last active process ID
+                            if (loadedData.activeProcessGroupId) {
+                                setActiveProcessGroupId(loadedData.activeProcessGroupId);
+                            }
                         }
                     }
                 } catch (error) {
@@ -117,14 +121,15 @@ const App = () => {
             if (!db || !userId) return;
             try {
                 const docRef = doc(db, `artifacts/${appId}/users/${userId}/mrc-control-charts`, 'data');
-                await setDoc(docRef, { processGroups, auditLog });
+                // FIX: Save the activeProcessGroupId along with other data
+                await setDoc(docRef, { processGroups, auditLog, activeProcessGroupId });
             } catch (error) {
                 console.error("Error saving data to Firestore:", error);
             }
         };
         const handler = setTimeout(() => { saveData(); }, 1500);
         return () => clearTimeout(handler);
-    }, [processGroups, auditLog, db, userId, isLoading]);
+    }, [processGroups, auditLog, activeProcessGroupId, db, userId, isLoading]);
 
     // --- UI Rendering Logic ---
     if (isLoading) {
