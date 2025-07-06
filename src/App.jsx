@@ -114,20 +114,41 @@ const App = () => {
         }
     }, []);
 
+    // --- DATA SAVING HOOKS (REFACTORED) ---
+    // Debounced save for main data (processGroups and auditLog)
     useEffect(() => {
-        if (isLoading) return;
-        const saveData = async () => {
-            if (!db || !userId) return;
+        if (isLoading || !db || !userId) return;
+
+        const handler = setTimeout(() => {
+            const saveData = async () => {
+                try {
+                    const docRef = doc(db, `artifacts/${appId}/users/${userId}/mrc-control-charts`, 'data');
+                    await setDoc(docRef, { processGroups, auditLog }, { merge: true });
+                } catch (error) {
+                    console.error("Error saving main data to Firestore:", error);
+                }
+            };
+            saveData();
+        }, 1500);
+
+        return () => clearTimeout(handler);
+    }, [processGroups, auditLog, db, userId, isLoading]);
+
+    // Immediate save for the active process ID to ensure session continuity
+    useEffect(() => {
+        if (isLoading || !db || !userId) return;
+
+        const saveActiveId = async () => {
             try {
                 const docRef = doc(db, `artifacts/${appId}/users/${userId}/mrc-control-charts`, 'data');
-                await setDoc(docRef, { processGroups, auditLog, activeProcessGroupId });
+                await setDoc(docRef, { activeProcessGroupId }, { merge: true });
             } catch (error) {
-                console.error("Error saving data to Firestore:", error);
+                console.error("Error saving active process ID:", error);
             }
         };
-        const handler = setTimeout(() => { saveData(); }, 1500);
-        return () => clearTimeout(handler);
-    }, [processGroups, auditLog, activeProcessGroupId, db, userId, isLoading]);
+        saveActiveId();
+    }, [activeProcessGroupId, db, userId, isLoading]);
+
 
     // --- UI Rendering Logic ---
     if (isLoading) {
@@ -141,6 +162,11 @@ const App = () => {
 
     if (activeProcessGroupId) {
         const activeProcessGroup = processGroups.find(p => p.id === activeProcessGroupId);
+        if (!activeProcessGroup) {
+            // Handle case where active ID is stale
+            setActiveProcessGroupId(null);
+            return null;
+        }
         const activeProcessGroupIndex = processGroups.findIndex(p => p.id === activeProcessGroupId);
 
         const updateProcessGroup = (updatedGroup) => {
@@ -239,7 +265,6 @@ const ChartManager = ({ processGroup, updateProcessGroup, goBack, auditLog, setA
   const [currentChartId, setCurrentChartId] = useState(processGroup.charts.length > 0 ? processGroup.charts[0].id : null);
   const [newValue, setNewValue] = useState('');
   const [currentAnalyst, setCurrentAnalyst] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isAuditLogModalOpen, setIsAuditLogModalOpen] = useState(false);
   const [isReasonModalOpen, setIsReasonModalOpen] = useState(false);
