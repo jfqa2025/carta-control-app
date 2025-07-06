@@ -393,16 +393,6 @@ const App = () => {
   const displayStats = currentChart?.inheritedStats || currentChart?.stats;
   const isDataEntryDisabled = currentChart?.data.length >= 30;
 
-  // Prepare data for the chart, including control limit values for each point
-  const chartData = currentChart?.data.map(d => ({
-    ...d,
-    mean: displayStats.mean,
-    ucl: displayStats.ucl,
-    lcl: displayStats.lcl,
-    uwl: displayStats.uwl,
-    lwl: displayStats.lwl,
-  })) || [];
-
   // Custom Tooltip for the chart to show more details
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
