@@ -71,6 +71,7 @@ const App = () => {
     const [db, setDb] = useState(null);
     const [userId, setUserId] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [isSaving, setIsSaving] = useState(false);
 
     // --- Firebase & Data Management ---
     useEffect(() => {
@@ -121,11 +122,14 @@ const App = () => {
 
         const handler = setTimeout(() => {
             const saveData = async () => {
+                setIsSaving(true);
                 try {
                     const docRef = doc(db, `artifacts/${appId}/users/${userId}/mrc-control-charts`, 'data');
                     await setDoc(docRef, { processGroups, auditLog }, { merge: true });
                 } catch (error) {
                     console.error("Error saving main data to Firestore:", error);
+                } finally {
+                    setTimeout(() => setIsSaving(false), 500);
                 }
             };
             saveData();
@@ -139,11 +143,14 @@ const App = () => {
         if (isLoading || !db || !userId) return;
 
         const saveActiveId = async () => {
+            setIsSaving(true);
             try {
                 const docRef = doc(db, `artifacts/${appId}/users/${userId}/mrc-control-charts`, 'data');
                 await setDoc(docRef, { activeProcessGroupId }, { merge: true });
             } catch (error) {
                 console.error("Error saving active process ID:", error);
+            } finally {
+                setTimeout(() => setIsSaving(false), 500);
             }
         };
         saveActiveId();
@@ -181,6 +188,7 @@ const App = () => {
                     goBack={() => setActiveProcessGroupId(null)} 
                     auditLog={auditLog}
                     setAuditLog={setAuditLog}
+                    isSaving={isSaving}
                 />;
     }
 
@@ -261,7 +269,7 @@ const ProcessDashboard = ({ processGroups, setProcessGroups, setActiveProcessGro
 
 
 // --- Chart Manager Component (The main view we had before) ---
-const ChartManager = ({ processGroup, updateProcessGroup, goBack, auditLog, setAuditLog }) => {
+const ChartManager = ({ processGroup, updateProcessGroup, goBack, auditLog, setAuditLog, isSaving }) => {
   const [currentChartId, setCurrentChartId] = useState(processGroup.charts.length > 0 ? processGroup.charts[0].id : null);
   const [newValue, setNewValue] = useState('');
   const [currentAnalyst, setCurrentAnalyst] = useState('');
