@@ -96,7 +96,6 @@ const App = () => {
                             const loadedData = docSnap.data();
                             setProcessGroups(loadedData.processGroups || []);
                             setAuditLog(loadedData.auditLog || []);
-                            // FIX: Load the last active process ID
                             if (loadedData.activeProcessGroupId) {
                                 setActiveProcessGroupId(loadedData.activeProcessGroupId);
                             }
@@ -121,7 +120,6 @@ const App = () => {
             if (!db || !userId) return;
             try {
                 const docRef = doc(db, `artifacts/${appId}/users/${userId}/mrc-control-charts`, 'data');
-                // FIX: Save the activeProcessGroupId along with other data
                 await setDoc(docRef, { processGroups, auditLog, activeProcessGroupId });
             } catch (error) {
                 console.error("Error saving data to Firestore:", error);
